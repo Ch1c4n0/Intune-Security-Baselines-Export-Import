@@ -1,0 +1,4 @@
+# Runtime artifacts - may contain tenant-specific data
+Exported-Baselines/
+*.log
+DEBUG_*.json
