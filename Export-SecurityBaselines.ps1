@@ -1,43 +1,43 @@
 <#
 .SYNOPSIS
-  Exporta todos os Security Baseline templates disponíveis no Intune para JSON.
+  Exports all available Security Baseline templates from Intune to JSON.
 
 .DESCRIPTION
-    Lista todos os templates de Security Baseline disponíveis no tenant
-    (configurationPolicyTemplates com templateFamily = 'baseline') — inclusive
-    os que ainda não têm nenhum perfil criado.
+    Lists all Security Baseline templates available in the tenant
+    (configurationPolicyTemplates with templateFamily = 'baseline') — including
+    the ones that don't have any profile created yet.
 
-    Para cada template selecionado:
-      1. Lê os settingTemplates do template (valores recomendados pela Microsoft)
-      2. Converte para o formato de policy settings
-      3. Cria um perfil temporário com essas settings
-      4. Exporta o perfil para JSON numa pasta nomeada <Template> - <Versão>
-      5. Deleta o perfil temporário
+    For each selected template:
+      1. Reads the template's settingTemplates (Microsoft recommended values)
+      2. Converts them to the policy settings format
+      3. Creates a temporary profile with these settings
+      4. Exports the profile to JSON in a folder named <Template> - <Version>
+      5. Deletes the temporary profile
 
-    O JSON gerado é compatível com o Import-SecurityBaselines.ps1.
+    The generated JSON is compatible with Import-SecurityBaselines.ps1.
 
 .PARAMETER OutputPath
-    Pasta de destino dos arquivos JSON exportados.
-    Padrão: .\Exported-Baselines\<data-hora>
+    Destination folder for the exported JSON files.
+    Default: .\Exported-Baselines\<timestamp>
 
 .PARAMETER AdminUPN
-    UPN do administrador — usado como login hint no device code.
+    Administrator UPN — used as login hint in the device code flow.
 
 .OUTPUTS
-    Arquivos JSON por template em OutputPath.
-    Log em "$env:TEMP\Export-SecurityBaselines.log"
+    JSON files per template in OutputPath.
+    Log at "$env:TEMP\Export-SecurityBaselines.log"
 
 .NOTES
   Version:      4.0.0
   Author:       Marcelo Gonçalves
   Date:         2026-06-24
   Requires:     PowerShell 7+
-                Permissões: DeviceManagementConfiguration.ReadWrite.All
-  Nota:         Não requer nenhum módulo do Microsoft.Graph SDK.
+                Permission: DeviceManagementConfiguration.ReadWrite.All
+  Note:         Does not require the Microsoft.Graph SDK module.
 
 .EXAMPLE
   .\Export-SecurityBaselines.ps1
-  Exporta todos os templates para .\Exported-Baselines\<timestamp>
+  Exports all templates to .\Exported-Baselines\<timestamp>
 
 .EXAMPLE
   .\Export-SecurityBaselines.ps1 -OutputPath "C:\Backup" -AdminUPN "admin@contoso.com"
@@ -46,8 +46,8 @@
 param(
     [string]$OutputPath = "",
     [string]$AdminUPN   = "",
-    [string]$ClientId   = "",   # Application (client) ID do app registrado no Entra ID
-    [string]$TenantId   = ""    # Directory (tenant) ID ou domínio (ex: contoso.onmicrosoft.com)
+    [string]$ClientId   = "",   # Application (client) ID of the app registered in Entra ID
+    [string]$TenantId   = ""    # Directory (tenant) ID or domain (e.g. contoso.onmicrosoft.com)
 )
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -81,8 +81,8 @@ function Get-GraphAll {
     return $results
 }
 
-# Busca múltiplos recursos em lote via Graph Batch API (max 20 por chamada)
-# Retorna hashtable: relativeUrl -> objeto de resposta
+# Fetches multiple resources in batch via the Graph Batch API (max 20 per call)
+# Returns hashtable: relativeUrl -> response object
 function Invoke-GraphBatch {
     param([string[]]$RelativeUrls, [string]$Token)
     $results   = @{}
@@ -108,9 +108,9 @@ function Invoke-GraphBatch {
     return $results
 }
 
-# ── Conversor: settingInstanceTemplate → settingInstance ──────────────────────
-# Converte recursivamente um settingInstanceTemplate para settingInstance,
-# incluindo os filhos obrigatórios da opção padrão selecionada.
+# ── Converter: settingInstanceTemplate → settingInstance ─────────────────────
+# Recursively converts a settingInstanceTemplate into a settingInstance,
+# including the required children of the selected default option.
 
 function Convert-SettingInstanceTemplate {
     param([object]$Inst)
@@ -134,7 +134,7 @@ function Convert-SettingInstanceTemplate {
             $vt       = $Inst.choiceSettingValueTemplate
             $defValue = $vt.defaultValue.settingDefinitionOptionId
 
-            # Filhos estão em defaultValue.children — cada item já é um settingInstanceTemplate completo
+            # Children are in defaultValue.children — each item is already a full settingInstanceTemplate
             $children = @()
             if ($vt.defaultValue -and $vt.defaultValue.children) {
                 $children = @(
@@ -162,12 +162,12 @@ function Convert-SettingInstanceTemplate {
             $rawVal = if ($null -ne $vt.defaultValue.constantValue) { $vt.defaultValue.constantValue }
                       elseif ($null -ne $vt.defaultValue.value)     { $vt.defaultValue.value }
                       else { $null }
-            # Valor já desserializado como número
+            # Value already deserialized as a number
             if (-not $isInt -and ($rawVal -is [int] -or $rawVal -is [long] -or $rawVal -is [double])) {
                 $isInt = $true
             }
-            # Bug nos templates da Microsoft: campo marcado como String mas a API exige Integer.
-            # Se o valor é uma string de dígitos puros (ex: "6", "17"), tratar como Integer.
+            # Bug in Microsoft's templates: field marked as String but the API requires Integer.
+            # If the value is a string of pure digits (e.g. "6", "17"), treat it as Integer.
             if (-not $isInt -and ($rawVal -is [string]) -and ($rawVal -match '^\d+$')) {
                 $isInt = $true
             }
@@ -189,7 +189,7 @@ function Convert-SettingInstanceTemplate {
         }
 
         '*simpleSettingCollectionInstance' {
-            # simpleSettingCollectionValueTemplate é um array de value templates
+            # simpleSettingCollectionValueTemplate is an array of value templates
             $vtArray = $Inst.simpleSettingCollectionValueTemplate
             if ($vtArray -and $vtArray.Count -gt 0) {
                 $collValues = @()
@@ -224,7 +224,7 @@ function Convert-SettingInstanceTemplate {
         }
 
         '*groupSettingCollectionInstance' {
-            # groupSettingCollectionValueTemplate é um array (não objeto com itemTemplate)
+            # groupSettingCollectionValueTemplate is an array (not an object with itemTemplate)
             $vtArray = $Inst.groupSettingCollectionValueTemplate
             if ($vtArray -and $vtArray.Count -gt 0) {
                 $groupItems = @()
@@ -252,7 +252,7 @@ function Convert-SettingInstanceTemplate {
         }
 
         '*choiceSettingCollectionInstance' {
-            # choiceSettingCollectionValueTemplate é um array de value templates
+            # choiceSettingCollectionValueTemplate is an array of value templates
             $vtArray = $Inst.choiceSettingCollectionValueTemplate
             if ($vtArray -and $vtArray.Count -gt 0) {
                 $collValues = @()
@@ -273,7 +273,7 @@ function Convert-SettingInstanceTemplate {
             }
         }
 
-        default { <# tipo desconhecido — não bloqueia o POST #> }
+        default { <# unknown type — does not block the POST #> }
     }
 
     return $si
@@ -291,30 +291,30 @@ function Convert-SettingTemplate {
 # ── Banner ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  Security Baselines - Export Templates para JSON           " -ForegroundColor Cyan
+Write-Host "  Security Baselines - Export Templates to JSON             " -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── Pasta de saída ────────────────────────────────────────────────────────────
+# ── Output folder ─────────────────────────────────────────────────────────────
 if (-not $OutputPath) {
     $timestamp  = Get-Date -Format "yyyyMMdd_HHmmss"
     $OutputPath = Join-Path (Get-Location) "Exported-Baselines\$timestamp"
 }
 
 New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
-Write-Log "  Destino : $OutputPath" "Yellow"
+Write-Log "  Destination : $OutputPath" "Yellow"
 Write-Host ""
 
-# ── Step 1 – Autenticação ─────────────────────────────────────────────────────
-# ClientId/TenantId não são mais hardcoded — vêm de parâmetro ou são perguntados aqui.
+# ── Step 1 – Authentication ───────────────────────────────────────────────────
+# ClientId/TenantId are no longer hardcoded — they come from a parameter or are asked here.
 if (-not $ClientId) {
-    Write-Host "  ClientId não informado (use -ClientId ou digite abaixo)." -ForegroundColor Yellow
-    Write-Host "  Enter para usar o Microsoft Graph PowerShell (multi-tenant, exige consentimento do admin na 1ª vez)" -ForegroundColor Gray
+    Write-Host "  ClientId not provided (use -ClientId or type it below)." -ForegroundColor Yellow
+    Write-Host "  Press Enter to use Microsoft Graph PowerShell (multi-tenant, requires admin consent on 1st use)" -ForegroundColor Gray
     $inputClientId = Read-Host "  Application (client) ID [14d82eec-204b-4c2f-b7e8-296a70dab67e]"
     $ClientId = if ($inputClientId) { $inputClientId } else { "14d82eec-204b-4c2f-b7e8-296a70dab67e" }
 }
 if (-not $TenantId) {
-    $inputTenantId = Read-Host "  Directory (tenant) ID ou domínio [common]"
+    $inputTenantId = Read-Host "  Directory (tenant) ID or domain [common]"
     $TenantId = if ($inputTenantId) { $inputTenantId } else { "common" }
 }
 
@@ -324,19 +324,19 @@ $scope    = "https://graph.microsoft.com/DeviceManagementConfiguration.ReadWrite
 $authBase = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0"
 
 Write-Host ""
-Write-Host "  Escolha o método de autenticação:" -ForegroundColor Cyan
-Write-Host "  [1] Device code  (abre navegador com código)" -ForegroundColor White
-Write-Host "  [2] Usuário e senha" -ForegroundColor White
+Write-Host "  Choose the authentication method:" -ForegroundColor Cyan
+Write-Host "  [1] Device code  (opens browser with a code)" -ForegroundColor White
+Write-Host "  [2] Username and password" -ForegroundColor White
 Write-Host ""
-$authChoice = Read-Host "  Opção (1 ou 2)"
+$authChoice = Read-Host "  Option (1 or 2)"
 
 $token = $null
 try {
     if ($authChoice -eq '2') {
-        # ── Autenticação por usuário e senha (ROPC) ──────────────────────────
-        Write-Log "Step 1: Autenticar no Microsoft Graph (usuário e senha)" "Cyan"
-        if (-not $AdminUPN) { $AdminUPN = Read-Host "  Usuário (UPN)" }
-        $secPass  = Read-Host "  Senha" -AsSecureString
+        # ── Username and password authentication (ROPC) ─────────────────────
+        Write-Log "Step 1: Authenticate to Microsoft Graph (username and password)" "Cyan"
+        if (-not $AdminUPN) { $AdminUPN = Read-Host "  Username (UPN)" }
+        $secPass  = Read-Host "  Password" -AsSecureString
         $plainPass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
                         [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass))
 
@@ -345,14 +345,14 @@ try {
                 "&scope=$([uri]::EscapeDataString($scope))" +
                 "&username=$([uri]::EscapeDataString($AdminUPN))" +
                 "&password=$([uri]::EscapeDataString($plainPass))"
-        $plainPass = $null   # limpar da memória
+        $plainPass = $null   # clear from memory
 
         $tkResp = Invoke-RestMethod -Method POST -Uri "$authBase/token" `
                       -Body $body -ContentType "application/x-www-form-urlencoded" -ErrorAction Stop
         $token = $tkResp.access_token
     } else {
-        # ── Autenticação por device code ─────────────────────────────────────
-        Write-Log "Step 1: Autenticar no Microsoft Graph (device code)" "Cyan"
+        # ── Device code authentication ───────────────────────────────────────
+        Write-Log "Step 1: Authenticate to Microsoft Graph (device code)" "Cyan"
         $dcBody = "client_id=$clientId&scope=$([uri]::EscapeDataString($scope))"
         if ($AdminUPN) { $dcBody += "&login_hint=$([uri]::EscapeDataString($AdminUPN))" }
 
@@ -360,10 +360,10 @@ try {
                   -Body $dcBody -ContentType "application/x-www-form-urlencoded" -ErrorAction Stop
 
         Write-Host ""
-        Write-Host "  Acesse : $($dc.verification_uri)" -ForegroundColor Yellow
-        Write-Host "  Código : $($dc.user_code)"        -ForegroundColor Yellow
+        Write-Host "  Go to  : $($dc.verification_uri)" -ForegroundColor Yellow
+        Write-Host "  Code   : $($dc.user_code)"        -ForegroundColor Yellow
         Write-Host ""
-        Write-Log "  Aguardando autenticação (expira em $($dc.expires_in)s)..." "Gray"
+        Write-Log "  Waiting for authentication (expires in $($dc.expires_in)s)..." "Gray"
 
         $expires  = (Get-Date).AddSeconds($dc.expires_in)
         $interval = [int]$dc.interval
@@ -384,67 +384,67 @@ try {
         }
     }
 
-    if (-not $token) { Write-Log "  ERRO: Timeout — autenticação não concluída a tempo." "Red"; exit 1 }
-    Write-Log "  Autenticado com sucesso." "Green"
+    if (-not $token) { Write-Log "  ERROR: Timeout — authentication not completed in time." "Red"; exit 1 }
+    Write-Log "  Authenticated successfully." "Green"
 }
 catch {
-    Write-Log "  ERRO na autenticação: $_" "Red"
+    Write-Log "  ERROR during authentication: $_" "Red"
     exit 1
 }
 
-# ── Step 2 – Listar templates disponíveis ────────────────────────────────────
+# ── Step 2 – List available templates ─────────────────────────────────────────
 Write-Log ""
-Write-Log "Step 2: Listar Security Baseline templates disponíveis" "Cyan"
+Write-Log "Step 2: List available Security Baseline templates" "Cyan"
 
 try {
     $allTemplates = Get-GraphAll `
         -Uri "https://graph.microsoft.com/beta/deviceManagement/configurationPolicyTemplates?`$filter=templateFamily eq 'baseline'&`$top=100" `
         -Token $token
 
-    Write-Log "  Templates encontrados: $($allTemplates.Count)" "Green"
+    Write-Log "  Templates found: $($allTemplates.Count)" "Green"
 }
 catch {
-    Write-Log "  ERRO ao listar templates: $_" "Red"
+    Write-Log "  ERROR listing templates: $_" "Red"
     exit 1
 }
 
 if ($allTemplates.Count -eq 0) {
-    Write-Log "  Nenhum Security Baseline template encontrado no tenant." "Yellow"
+    Write-Log "  No Security Baseline template found in the tenant." "Yellow"
     exit 0
 }
 
-# ── Seletor interativo ────────────────────────────────────────────────────────
+# ── Interactive selector ───────────────────────────────────────────────────────
 Write-Host ""
-Write-Host "  Abrindo seletor interativo..." -ForegroundColor Cyan
-Write-Host "  -> Selecione os templates desejados (Ctrl+clique para múltiplos) e clique em OK." -ForegroundColor Yellow
+Write-Host "  Opening interactive selector..." -ForegroundColor Cyan
+Write-Host "  -> Select the desired templates (Ctrl+click for multiple) and click OK." -ForegroundColor Yellow
 Write-Host ""
 
 $templateList = $allTemplates | ForEach-Object {
     [PSCustomObject]@{
-        'Nome do Template' = $_.displayName
-        'Versão'           = $_.displayVersion
-        'Plataforma'       = $_.platforms
-        '_id'              = $_.id
+        'Template Name' = $_.displayName
+        'Version'       = $_.displayVersion
+        'Platform'      = $_.platforms
+        '_id'           = $_.id
     }
 }
 
 $selected = $templateList |
-    Select-Object 'Nome do Template', Versão, Plataforma |
-    Out-GridView -Title "Selecione os Security Baseline templates para exportar" -PassThru
+    Select-Object 'Template Name', Version, Platform |
+    Out-GridView -Title "Select the Security Baseline templates to export" -PassThru
 
 if (-not $selected -or $selected.Count -eq 0) {
-    Write-Log "Nenhum template selecionado. Operação cancelada." "Yellow"
+    Write-Log "No template selected. Operation cancelled." "Yellow"
     exit 0
 }
 
-$selectedKeys = $selected | ForEach-Object { "$($_.'Nome do Template')||$($_.Versão)" }
-$toExport     = $templateList | Where-Object { $selectedKeys -contains "$($_.'Nome do Template')||$($_.Versão)" }
+$selectedKeys = $selected | ForEach-Object { "$($_.'Template Name')||$($_.Version)" }
+$toExport     = $templateList | Where-Object { $selectedKeys -contains "$($_.'Template Name')||$($_.Version)" }
 
-Write-Log "  Selecionados: $($toExport.Count) template(s)" "Green"
+Write-Log "  Selected: $($toExport.Count) template(s)" "Green"
 
-# ── Step 3 – Exportar cada template ──────────────────────────────────────────
+# ── Step 3 – Export each template ─────────────────────────────────────────────
 Write-Log ""
-Write-Log "Step 3: Exportar templates para JSON" "Cyan"
+Write-Log "Step 3: Export templates to JSON" "Cyan"
 
 $baseUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies"
 $tmplUri = "https://graph.microsoft.com/beta/deviceManagement/configurationPolicyTemplates"
@@ -452,10 +452,10 @@ $stats   = @{ Exported = 0; Failed = 0 }
 $tempTag = "TEMP_EXPORT_$(Get-Date -Format 'HHmmss')"
 
 foreach ($tmpl in $toExport) {
-    $templateName    = $tmpl.'Nome do Template'
-    $templateVersion = $tmpl.Versão
+    $templateName    = $tmpl.'Template Name'
+    $templateVersion = $tmpl.Version
     $templateId      = $tmpl.'_id'
-    $templatePlatform = $tmpl.Plataforma
+    $templatePlatform = $tmpl.Platform
 
     Write-Log ""
     Write-Log "  Template: $templateName ($templateVersion)" "Cyan"
@@ -463,20 +463,20 @@ foreach ($tmpl in $toExport) {
     $tempPolicyId = $null
 
     try {
-        # 1. Ler os settingTemplates para obter os valores recomendados
-        Write-Log "    Lendo setting templates..." "Gray"
+        # 1. Read the settingTemplates to get the recommended values
+        Write-Log "    Reading setting templates..." "Gray"
         $settingTemplates = Get-GraphAll `
             -Uri "$tmplUri/$templateId/settingTemplates?`$top=1000" `
             -Token $token
 
-        Write-Log "    $($settingTemplates.Count) setting templates encontrados." "Gray"
+        Write-Log "    $($settingTemplates.Count) setting templates found." "Gray"
 
-        # 2. Debug: salvar raw dos settingTemplates para análise
+        # 2. Debug: save raw settingTemplates for analysis
         $debugPath = Join-Path $scriptDir "DEBUG_settingTemplates_$($templateName -replace '[\\/:*?"<>|]','_').json"
         $settingTemplates | ConvertTo-Json -Depth 20 | Out-File -FilePath $debugPath -Encoding UTF8 -Force
-        Write-Log "    DEBUG: settingTemplates salvo em $debugPath" "Yellow"
+        Write-Log "    DEBUG: settingTemplates saved to $debugPath" "Yellow"
 
-        # 3. Converter para o formato de settings da policy
+        # 3. Convert to the policy settings format
         $settings = [System.Collections.Generic.List[object]]::new()
         $idx = 0
         foreach ($st in $settingTemplates) {
@@ -485,14 +485,14 @@ foreach ($tmpl in $toExport) {
             $idx++
         }
 
-        Write-Log "    $($settings.Count) settings convertidas." "Gray"
+        Write-Log "    $($settings.Count) settings converted." "Gray"
 
-        # 3a. Debug: salvar settings convertidas para diagnóstico
+        # 3a. Debug: save converted settings for diagnostics
         $debugConvPath = Join-Path $scriptDir "DEBUG_converted_$($templateName -replace '[\\/:*?"<>|]','_').json"
         $settings | ConvertTo-Json -Depth 30 | Out-File -FilePath $debugConvPath -Encoding UTF8 -Force
-        Write-Log "    DEBUG: settings convertidas salvas em $debugConvPath" "Yellow"
+        Write-Log "    DEBUG: converted settings saved to $debugConvPath" "Yellow"
 
-        # 3. Criar perfil temporário com as settings
+        # 3. Create a temporary profile with the settings
         $tempPolicyName = "$tempTag - $($templateName -replace '[\\/:*?"<>|]','_')"
         $createBody = @{
             name              = $tempPolicyName
@@ -506,19 +506,19 @@ foreach ($tmpl in $toExport) {
             settings          = $settings.ToArray()
         }
 
-        Write-Log "    Criando perfil temporário..." "Gray"
+        Write-Log "    Creating temporary profile..." "Gray"
         $tempPolicy   = Invoke-Graph -Method POST -Uri $baseUri -Body $createBody -Token $token
         $tempPolicyId = $tempPolicy.id
-        Write-Log "    Perfil criado (ID: $tempPolicyId)" "Gray"
+        Write-Log "    Profile created (ID: $tempPolicyId)" "Gray"
 
-        # 4. Ler de volta com os valores finais preenchidos pelo Intune
+        # 4. Read it back with the final values filled in by Intune
         $allSettings = Get-GraphAll `
             -Uri "$baseUri/$tempPolicyId/settings?`$top=1000" `
             -Token $token
 
-        Write-Log "    $($allSettings.Count) settings capturadas do perfil." "Gray"
+        Write-Log "    $($allSettings.Count) settings captured from the profile." "Gray"
 
-        # 5. Montar objeto de exportação
+        # 5. Build the export object
         $exportObject = [ordered]@{
             description       = ""
             name              = "$templateName - $templateVersion"
@@ -534,37 +534,37 @@ foreach ($tmpl in $toExport) {
             settings          = $allSettings
         }
 
-        # 6. Criar pasta da baseline
+        # 6. Create the baseline folder
         $safeFolderName = ("$templateName - $templateVersion" -replace '[\\/:*?"<>|]', '_')
         $folderPath     = Join-Path $OutputPath $safeFolderName
         New-Item -Path $folderPath -ItemType Directory -Force | Out-Null
 
-        # 6a. Salvar JSON completo da baseline na raiz da pasta
+        # 6a. Save the full baseline JSON at the root of the folder
         $safeFileName = "$safeFolderName.json"
         $filePath     = Join-Path $folderPath $safeFileName
         $exportObject | ConvertTo-Json -Depth 100 | Out-File -FilePath $filePath -Encoding UTF8 -Force
-        Write-Log "    Salvo (completo): $safeFolderName\$safeFileName" "Green"
+        Write-Log "    Saved (full): $safeFolderName\$safeFileName" "Green"
 
-        # 6b. Buscar displayName e categoryId de todas as settings em lote (Graph Batch API)
-        Write-Log "    Buscando nomes e categorias via batch API..." "Gray"
+        # 6b. Fetch displayName and categoryId for all settings in batch (Graph Batch API)
+        Write-Log "    Fetching names and categories via batch API..." "Gray"
         $settingsBase  = '/deviceManagement/configurationSettings'
         $categoriesBase = '/deviceManagement/configurationCategories'
 
-        # Coletar settingDefinitionIds únicos das settings exportadas
+        # Collect unique settingDefinitionIds from the exported settings
         $defIds = $allSettings | ForEach-Object { $_.settingInstance.settingDefinitionId } | Select-Object -Unique
         $settingUrls = $defIds | ForEach-Object { "$settingsBase/$([uri]::EscapeDataString($_))" }
 
-        # Batch: buscar todas as setting definitions
-        Write-Log "    Batch: $($settingUrls.Count) setting definition(s) em $([Math]::Ceiling($settingUrls.Count/20)) chamada(s)..." "Gray"
+        # Batch: fetch all setting definitions
+        Write-Log "    Batch: $($settingUrls.Count) setting definition(s) in $([Math]::Ceiling($settingUrls.Count/20)) call(s)..." "Gray"
         $settingDefMap = Invoke-GraphBatch -RelativeUrls $settingUrls -Token $token
-        # Remontar chave por defId (sem o prefixo de URL)
+        # Rebuild key by defId (without the URL prefix)
         $defById = @{}
         foreach ($url in $settingDefMap.Keys) {
             $obj = $settingDefMap[$url]
             if ($obj.id) { $defById[$obj.id] = $obj }
         }
 
-        # Coletar categoryIds únicos e buscar em batch
+        # Collect unique categoryIds and fetch in batch
         $uniqueCatIds = $defById.Values | Where-Object { $_.categoryId } |
                         ForEach-Object { $_.categoryId } | Select-Object -Unique
         $catUrls  = $uniqueCatIds | ForEach-Object { "$categoriesBase/$_" }
@@ -574,9 +574,9 @@ foreach ($tmpl in $toExport) {
             $obj = $catByUrl[$url]
             if ($obj.id) { $catById[$obj.id] = $obj.displayName }
         }
-        Write-Log "    Categorias: $($catById.Values | Sort-Object -Unique)" "Gray"
+        Write-Log "    Categories: $($catById.Values | Sort-Object -Unique)" "Gray"
 
-        # Montar metadados de cada setting
+        # Build metadata for each setting
         $settingIdx  = 1
         $settingMeta = [System.Collections.Generic.List[object]]::new()
         foreach ($setting in $allSettings) {
@@ -602,13 +602,13 @@ foreach ($tmpl in $toExport) {
             $settingIdx++
         }
 
-        # 6d. Agrupar por categoria e salvar JSONs em subpastas de categoria
+        # 6d. Group by category and save JSONs in category subfolders
         $grouped = $settingMeta | Group-Object -Property CategoryName
         foreach ($group in $grouped | Sort-Object Name) {
             $safeCatName = ($group.Name -replace '[\\/:*?"<>|]', '_').Trim()
             $catFolder   = Join-Path $folderPath $safeCatName
             New-Item -Path $catFolder -ItemType Directory -Force | Out-Null
-            Write-Log "    Categoria: $($group.Name) ($($group.Count) setting(s))" "Cyan"
+            Write-Log "    Category: $($group.Name) ($($group.Count) setting(s))" "Cyan"
 
             $idxInCat = 1
             foreach ($meta in $group.Group | Sort-Object Index) {
@@ -644,36 +644,36 @@ foreach ($tmpl in $toExport) {
             }
         }
 
-        Write-Log "    $($allSettings.Count) setting(s) exportadas por categoria." "Green"
+        Write-Log "    $($allSettings.Count) setting(s) exported by category." "Green"
         $stats.Exported++
     }
     catch {
-        Write-Log "    ERRO: $_" "Red"
+        Write-Log "    ERROR: $_" "Red"
         $stats.Failed++
     }
     finally {
         if ($tempPolicyId) {
             try {
                 Invoke-Graph -Method DELETE -Uri "$baseUri/$tempPolicyId" -Token $token | Out-Null
-                Write-Log "    Perfil temporário removido." "Gray"
+                Write-Log "    Temporary profile removed." "Gray"
             }
             catch {
-                Write-Log "    AVISO: Não foi possível remover perfil temporário (ID: $tempPolicyId) — remova manualmente no Intune." "Yellow"
+                Write-Log "    WARNING: Could not remove the temporary profile (ID: $tempPolicyId) — remove it manually in Intune." "Yellow"
             }
         }
     }
 }
 
-# ── Resumo ────────────────────────────────────────────────────────────────────
+# ── Summary ────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  Resumo da Exportação                                      " -ForegroundColor Cyan
+Write-Host "  Export Summary                                             " -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Log "  Exportados com sucesso : $($stats.Exported)" "Green"
+Write-Log "  Exported successfully  : $($stats.Exported)" "Green"
 if ($stats.Failed -gt 0) {
-    Write-Log "  Com erro               : $($stats.Failed)" "Red"
+    Write-Log "  With errors            : $($stats.Failed)" "Red"
 }
-Write-Log "  Pasta de saída         : $OutputPath" "Cyan"
+Write-Log "  Output folder          : $OutputPath" "Cyan"
 Write-Log "  Log                    : $logFilePath" "Cyan"
 Write-Host ""
-Write-Log "Exportação concluída." "Green"
+Write-Log "Export completed." "Green"

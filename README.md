@@ -175,15 +175,15 @@ Unified entry point — asks whether you want to **Export** or **Import**, then 
 .\Manage-SecurityBaselines.ps1
 
 # Skip the menu
-.\Manage-SecurityBaselines.ps1 -Mode Exportar -OutputPath "C:\Backup"
-.\Manage-SecurityBaselines.ps1 -Mode Importar -SourcePath ".\Exported-Baselines" -KeepAsBaseline -OverwriteExisting
+.\Manage-SecurityBaselines.ps1 -Mode Export -OutputPath "C:\Backup"
+.\Manage-SecurityBaselines.ps1 -Mode Import -SourcePath ".\Exported-Baselines" -KeepAsBaseline -OverwriteExisting
 ```
 
 #### Parameters
 
 | Parameter | Applies to | Description |
 |-----------|------------|-------------|
-| `-Mode` | Both | `"Exportar"` or `"Importar"`. If omitted, asks interactively |
+| `-Mode` | Both | `"Export"` or `"Import"`. If omitted, asks interactively |
 | `-OutputPath` | Export | Destination folder for JSON files |
 | `-SourcePath` | Import | Folder with JSON files (recursive search) |
 | `-GroupAssignmentId` | Import | Group Object ID for automatic assignment |
@@ -497,15 +497,15 @@ Ponto de entrada unificado — pergunta se você quer **Exportar** ou **Importar
 .\Manage-SecurityBaselines.ps1
 
 # Pulando o menu
-.\Manage-SecurityBaselines.ps1 -Mode Exportar -OutputPath "C:\Backup"
-.\Manage-SecurityBaselines.ps1 -Mode Importar -SourcePath ".\Exported-Baselines" -KeepAsBaseline -OverwriteExisting
+.\Manage-SecurityBaselines.ps1 -Mode Export -OutputPath "C:\Backup"
+.\Manage-SecurityBaselines.ps1 -Mode Import -SourcePath ".\Exported-Baselines" -KeepAsBaseline -OverwriteExisting
 ```
 
 #### Parâmetros
 
 | Parâmetro | Aplica a | Descrição |
 |-----------|----------|-----------|
-| `-Mode` | Ambos | `"Exportar"` ou `"Importar"`. Se omitido, pergunta interativamente |
+| `-Mode` | Ambos | `"Export"` ou `"Import"` (em inglês). Se omitido, pergunta interativamente |
 | `-OutputPath` | Export | Pasta de destino dos arquivos JSON |
 | `-SourcePath` | Import | Pasta com os JSONs (busca recursiva) |
 | `-GroupAssignmentId` | Import | Object ID do grupo para atribuição automática |

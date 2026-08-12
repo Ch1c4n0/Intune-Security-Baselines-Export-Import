@@ -1,56 +1,56 @@
 <#
 .SYNOPSIS
-  Menu único para Export-SecurityBaselines.ps1 e Import-SecurityBaselines.ps1.
+  Single menu for Export-SecurityBaselines.ps1 and Import-SecurityBaselines.ps1.
 
 .DESCRIPTION
-    Pergunta se você quer Exportar ou Importar Security Baselines e chama o
-    script correspondente com os parâmetros informados. Não duplica a lógica
-    de export/import — apenas repassa para os scripts originais, que devem
-    estar na mesma pasta.
+    Asks whether you want to Export or Import Security Baselines and calls the
+    corresponding script with the given parameters. Does not duplicate the
+    export/import logic — it just forwards to the original scripts, which must
+    be in the same folder.
 
 .PARAMETER Mode
-    "Exportar" ou "Importar". Se omitido, o script pergunta interativamente.
+    "Export" or "Import". If omitted, the script asks interactively.
 
 .PARAMETER OutputPath
-    (Export) Pasta de destino dos JSONs exportados.
+    (Export) Destination folder for the exported JSONs.
 
 .PARAMETER SourcePath
-    (Import) Pasta com os JSONs a importar.
+    (Import) Folder with the JSONs to import.
 
 .PARAMETER GroupAssignmentId
-    (Import) Object ID de um grupo do Entra ID para atribuir as políticas criadas.
+    (Import) Object ID of an Entra ID group to assign the created policies to.
 
 .PARAMETER KeepAsBaseline
-    (Import) Preserva o vínculo com o Security Baseline template original.
+    (Import) Preserves the link to the original Security Baseline template.
 
 .PARAMETER OverwriteExisting
-    (Import) Sobrescreve políticas com nome idêntico.
+    (Import) Overwrites policies with an identical name.
 
 .PARAMETER AdminUPN
-    UPN do administrador — usado como login hint no device code.
+    Administrator UPN — used as login hint in the device code flow.
 
 .PARAMETER ClientId
-    Application (client) ID do app registrado no Entra ID.
+    Application (client) ID of the app registered in Entra ID.
 
 .PARAMETER TenantId
-    Directory (tenant) ID ou domínio (ex: contoso.onmicrosoft.com).
+    Directory (tenant) ID or domain (e.g. contoso.onmicrosoft.com).
 
 .EXAMPLE
   .\Manage-SecurityBaselines.ps1
-  Pergunta Exportar/Importar e depois pede o restante interativamente.
+  Asks Export/Import and then prompts for the rest interactively.
 
 .EXAMPLE
-  .\Manage-SecurityBaselines.ps1 -Mode Importar -SourcePath ".\Exported-Baselines" -OverwriteExisting
+  .\Manage-SecurityBaselines.ps1 -Mode Import -SourcePath ".\Exported-Baselines" -OverwriteExisting
 
 .NOTES
   Version:  1.0.0
   Author:   Marcelo Gonçalves
   Date:     2026-08-12
-  Requires: Export-SecurityBaselines.ps1 e Import-SecurityBaselines.ps1 na mesma pasta.
+  Requires: Export-SecurityBaselines.ps1 and Import-SecurityBaselines.ps1 in the same folder.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet("Exportar", "Importar", "")]
+    [ValidateSet("Export", "Import", "")]
     [string]$Mode = "",
 
     # Export
@@ -62,7 +62,7 @@ param(
     [switch]$KeepAsBaseline,
     [switch]$OverwriteExisting,
 
-    # Comuns (autenticação)
+    # Common (authentication)
     [string]$AdminUPN = "",
     [string]$ClientId = "",
     [string]$TenantId = ""
@@ -74,38 +74,38 @@ $importScript = Join-Path $scriptDir "Import-SecurityBaselines.ps1"
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  Security Baselines - Menu Export/Import                   " -ForegroundColor Cyan
+Write-Host "  Security Baselines - Export/Import Menu                   " -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 
 if (-not (Test-Path $exportScript) -or -not (Test-Path $importScript)) {
-    Write-Host "  ERRO: Export-SecurityBaselines.ps1 e Import-SecurityBaselines.ps1 precisam estar na mesma pasta deste script." -ForegroundColor Red
+    Write-Host "  ERROR: Export-SecurityBaselines.ps1 and Import-SecurityBaselines.ps1 must be in the same folder as this script." -ForegroundColor Red
     exit 1
 }
 
 if (-not $Mode) {
-    Write-Host "  O que você deseja fazer?" -ForegroundColor Cyan
-    Write-Host "  [1] Exportar baselines do Intune para JSON" -ForegroundColor White
-    Write-Host "  [2] Importar baselines de JSON para o Intune" -ForegroundColor White
+    Write-Host "  What do you want to do?" -ForegroundColor Cyan
+    Write-Host "  [1] Export baselines from Intune to JSON" -ForegroundColor White
+    Write-Host "  [2] Import baselines from JSON into Intune" -ForegroundColor White
     Write-Host ""
-    $choice = Read-Host "  Opção (1 ou 2)"
-    $Mode   = if ($choice -eq '2') { "Importar" } else { "Exportar" }
+    $choice = Read-Host "  Option (1 or 2)"
+    $Mode   = if ($choice -eq '2') { "Import" } else { "Export" }
 }
 
-# ── Parâmetros comuns de autenticação ─────────────────────────────────────────
+# ── Common authentication parameters ──────────────────────────────────────────
 $commonParams = @{}
 if ($AdminUPN) { $commonParams.AdminUPN = $AdminUPN }
 if ($ClientId) { $commonParams.ClientId = $ClientId }
 if ($TenantId) { $commonParams.TenantId = $TenantId }
 
-if ($Mode -eq "Importar") {
+if ($Mode -eq "Import") {
     $params = $commonParams.Clone()
     if ($SourcePath)        { $params.SourcePath        = $SourcePath }
     if ($GroupAssignmentId) { $params.GroupAssignmentId = $GroupAssignmentId }
     if ($KeepAsBaseline)    { $params.KeepAsBaseline    = $true }
     if ($OverwriteExisting) { $params.OverwriteExisting = $true }
 
-    Write-Host "  Modo: Importar" -ForegroundColor Green
+    Write-Host "  Mode: Import" -ForegroundColor Green
     Write-Host ""
     & $importScript @params
 }
@@ -113,7 +113,7 @@ else {
     $params = $commonParams.Clone()
     if ($OutputPath) { $params.OutputPath = $OutputPath }
 
-    Write-Host "  Modo: Exportar" -ForegroundColor Green
+    Write-Host "  Mode: Export" -ForegroundColor Green
     Write-Host ""
     & $exportScript @params
 }
